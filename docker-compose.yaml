@@ -13,16 +13,16 @@ services:
 #docker run -d --restart=always --name=reader -e "SPRING_PROFILES_ACTIVE=prod" -e "READER_APP_SECURE=true" -e "READER_APP_SECUREKEY=管理密码" -e "READER_APP_INVITECODE=注册邀请码" -v $(pwd)/logs:/logs -v $(pwd)/storage:/storage -p 8080:8080 hectorqin/reader
 
 # 自用版
-  read_own:
-    image: hectorqin/reader
-    container_name: reader_own
-    restart: always
-    ports:
+   read_own:
+     image: hectorqin/reader
+     container_name: reader_own
+     restart: always
+     ports:
       - 4395:8080
-    volumes:
+     volumes:
       - /home/reader/logs:/logs
       - /home/reader/storage:/storage
-    environment:
+     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - READER_APP_CACHECHAPTERCONTENT=true #是否开启缓存章节内容 V2.0
 # 多用户版
