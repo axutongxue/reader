@@ -20,11 +20,16 @@
         <el-table-column
           type="selection"
           width="25"
-          fixed
+          :fixed="$store.state.miniInterface"
           :selectable="row => !row.toParent"
         >
         </el-table-column>
-        <el-table-column property="name" min-width="150px" label="文件名" fixed>
+        <el-table-column
+          property="name"
+          min-width="150px"
+          label="文件名"
+          :fixed="$store.state.miniInterface"
+        >
           <template slot-scope="scope">
             <span v-if="!scope.row.isDirectory">{{ scope.row.name }}</span>
             <el-link
@@ -97,12 +102,13 @@
         style="display:none"
       />
       <span class="check-tip">已选择 {{ localFileSelection.length }} 个</span>
-      @<el-button size="medium" @click="cancel">取消</el-button>
+      <el-button size="medium" @click="cancel">取消</el-button>
     </div>
   </el-dialog>
 </template>
 
 <script>
+import { mapGetters } from "vuex";
 import Axios from "../plugins/axios";
 import { formatSize } from "../plugins/helper";
 
@@ -120,7 +126,10 @@ export default {
       localFileSelection: []
     };
   },
-  props: ["show", "dialogWidth", "dialogTop", "dialogContentHeight"],
+  props: ["show"],
+  computed: {
+    ...mapGetters(["dialogWidth", "dialogTop", "dialogContentHeight"])
+  },
   watch: {
     show(isVisible) {
       if (isVisible) {
@@ -144,7 +153,10 @@ export default {
     canImport(row) {
       const path = row.path.toLowerCase();
       return (
-        path.endsWith(".txt") || path.endsWith(".epub") || path.endsWith(".umd")
+        path.endsWith(".txt") ||
+        path.endsWith(".epub") ||
+        path.endsWith(".umd") ||
+        path.endsWith(".cbz")
       );
     },
     cancel() {
@@ -247,7 +259,7 @@ export default {
           return;
         }
       }
-      Axios.post(this.api + "/importFromLocalStorePreview", {
+      Axios.post(this.api + "/importFromLocalPathPreview", {
         path:
           row === true ? this.localFileSelection.map(v => v.path) : [row.path]
       }).then(
@@ -257,9 +269,9 @@ export default {
               this.$message.error("没有选择可导入的书籍");
               return;
             }
-            this.cancel();
+            // this.cancel();
             setTimeout(() => {
-              this.$emit("importFromLocalStorePreview", res.data.data);
+              this.$emit("importFromLocalPathPreview", res.data.data);
             }, 0);
           }
         },

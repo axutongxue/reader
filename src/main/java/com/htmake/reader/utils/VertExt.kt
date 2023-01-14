@@ -26,7 +26,7 @@ import io.legado.app.utils.MD5Utils
  * @Date: 2019-05-21 16:17
  * @Description:
  */
-private val logger = KotlinLogging.logger {}
+val logger = KotlinLogging.logger {}
 
 val gson = GsonBuilder().disableHtmlEscaping().create()
 val prettyGson = GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create()
@@ -47,7 +47,7 @@ fun RoutingContext.success(any: Any?) {
 }
 
 fun RoutingContext.error(throwable: Throwable) {
-    val path = URLDecoder.decode(this.request().absoluteURI())
+    val path = URLDecoder.decode(this.request().absoluteURI(), "UTF-8")
     val basicError = BasicError(
             "Internal Server Error",
             throwable.toString(),
@@ -73,8 +73,10 @@ fun getWorkDir(subPath: String = ""): String {
         var currentDir = System.getProperty("user.dir")
         logger.info("osName: {} currentDir: {}", osName, currentDir)
         // MacOS 存放目录为用户目录
-        if (osName.startsWith("Mac OS") && !currentDir.startsWith("/Users/")) {
+        if (osName.startsWith("Mac OS", true) && !currentDir.startsWith("/Users/")) {
             workDirPath = Paths.get(System.getProperty("user.home"), ".reader").toString()
+        } else {
+            workDirPath = currentDir
         }
         workDirInit = true
     }
@@ -141,7 +143,7 @@ fun saveStorage(vararg name: String, value: Any, pretty: Boolean = false) {
     val filename = name.last()
     val file = File(getRelativePath(storagePath, *name.copyOfRange(0, name.size - 1), "${filename}.json"))
     // val file = File(storagePath + "/${name}.json")
-    logger.info("storage key: {} path: {}", name, file.absoluteFile)
+    logger.info("Save file to storage name: {} path: {}", name, file.absoluteFile)
 
     if (!file.parentFile.exists()) {
         file.parentFile.mkdirs()
@@ -162,7 +164,7 @@ fun getStorage(vararg name: String): String?  {
 
     val filename = name.last()
     val file = File(getRelativePath(storagePath, *name.copyOfRange(0, name.size - 1), "${filename}.json"))
-    logger.info("storage key: {} path: {}", name, file.absoluteFile)
+    logger.info("Read file from storage name: {} path: {}", name, file.absoluteFile)
     if (!file.exists()) {
         return null
     }

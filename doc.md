@@ -15,6 +15,7 @@
     - [服务器版](#服务器版)
     - [Docker版](#docker版)
     - [Docker-Compose版(推荐)](#docker-compose版推荐)
+    - [脚本部署(甲骨文非Ubuntu可能不支持)](#通过脚本一键部署)
   - [Nginx反向代理](#nginx反向代理)
   - [开发编译](#开发编译)
     - [编译脚本](#编译脚本)
@@ -45,13 +46,11 @@
 
 数据存储目录结构如下：
 
-> 书籍缓存目录由 `书名` 变为 `书名_作者名`，这个变动需要手动编辑，否则书籍书源列表缓存信息无法使用
-
 ```bash
 storage
 ├── assets                                        # 静态资源
-│   |── covers                                    # 本地 epub 书籍的封面图片目录
 │   ├── hector                                    # 用户 hector 的资源目录
+│   |   |── covers                                # 本地 epub 书籍的封面图片目录
 │   │   ├── background                            # 自定义阅读背景图片保存目录
 │   │   │   └── 6.jpg
 │   └── reader.css                                # 自定义CSS样式文件
@@ -265,37 +264,87 @@ docker run -d --restart=always --name=reader -e "SPRING_PROFILES_ACTIVE=prod" -e
 #:后面的端口修改为映射端口
 # web端 http://localhost:8080/
 # 接口地址 http://localhost:8080/reader3/
+
+# 通过watchtower手动更新
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower --cleanup --run-once reader
+
+# 使用 remote-webview 功能
+# 1.创建 remote-webview 容器
+docker run -d --network host --restart=always hectorqin/remote-webview
+# 2.重建 reader 容器
+reader使用宿主机网络：--network host
+reader添加环境变量：-e "READER_APP_REMOTEWEBVIEWAPI=http://localhost:8050"
+获取reader添加参数：--reader.app.remoteWebviewApi=http://localhost:8050"
 ```
 
 ### Docker-Compose版(推荐)
 
-```bash
-#安装docker-compose
+```shell
+#腾讯云，阿里云，华为云，甲骨文等服务器提供商需在控制台面板手动关闭防火墙并放行端口
+#安装docker 及 docker-compose
 #Debian/Ubuntu
 apt install docker-compose -y
 #CentOS
-curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-docker-compose --version
+curl -fsSL https://get.docker.com | bash -s docker #国外服务器
+curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun #国内服务器
 
 # 下载项目里的 docker-compose.yaml
-wget https://raw.githubusercontent.com/hectorqin/reader/master/docker-compose.yaml
-# 更具 docker-compose.yaml 里面的注释编辑所需配置
+wget https://ghproxy.com/https://raw.githubusercontent.com/hectorqin/reader/master/docker-compose.yaml
+# 根据 docker-compose.yaml 里面的注释编辑所需配置
+vim docker-compose.yaml
+# 保存
+esc
+:wq
 # 启动 docker-compose
 docker-compose up -d
 
 # 停止 docker-compose
 docker-compose stop
+
+# 查看实时日志
+docker logs -f reader
+
+# 自行导入远程书源(打开链接后复制网址导入即可)
+https://legado.pages.dev
+
+# 手动更新
+docker-compose pull && docker-compose up -d
 ```
 
-## Nginx反向代理
+### 通过脚本一键部署
+
+```shell
+# 此脚本对甲骨文非Ubuntu系统,CentOS9可能不兼容。建议网上手动搜索
+#curl 
+bash <(curl -L -s https://ghproxy.com/https://raw.githubusercontent.com/hectorqin/reader/master/reader.sh)
+
+#wget 
+bash <(wget -qO- --no-check-certificate https://ghproxy.com/https://raw.githubusercontent.com/hectorqin/reader/master/reader.sh)
+
+```
+
+## Nginx反向代理(如果有域名可以考虑80端口复用)
+
+```shell
+# 宝塔等各种面板不适用下列教程
+# Debian/Ubuntu
+apt install nginx -y
+# CentOS
+yum install nginx -y
+vim /etc/nginx/conf.d/reader.conf
+将下面代码复制进reader.conf后，修改域名输入
+esc
+:wq
+保持即可
+```
 
 ```nginx
 server {
     listen 80;
     server_name 域名;
     #开启ssl解除注释
-    #不使用宝塔获取证书脚本  https://github.com/Misaka-blog/acme-1key
+    # SSL证书获取
+    # https://github.com/acmesh-official/acme.sh/wiki/%E8%AF%B4%E6%98%8E
     #listen 443 ssl;
     #ssl_certificate 证书.cer;
     #ssl_certificate_key 证书.key;
@@ -317,10 +366,12 @@ server {
     gzip_types text/plain text/css text/javascript application/json application/javascript application/x-javascript application/xml; #设置需要压缩的数据格式
     gzip_vary on;
 
+    client_max_body_size   50m; #允许上传50MB文件,上传本地书籍需要修改此项大小.如nginx主配置文件已添加,删除此行并修改主配置即可
+
     location / {
         proxy_pass  http://127.0.0.1:4396; #端口自行修改为映射端口
-        proxy_http_version	1.1;
-        proxy_cache_bypass	$http_upgrade;
+        proxy_http_version 1.1;
+        proxy_cache_bypass $http_upgrade;
         proxy_set_header Upgrade           $http_upgrade;
         proxy_set_header Connection        "upgrade";
         proxy_set_header Host              $host;
@@ -370,10 +421,10 @@ yarn sync
 ```bash
 ./gradlew assemble --info
 
-java -jar build/libs/reader-2.0.0.jar
+java -jar build/libs/reader-${version}.jar
 
 # 指定 storage 路径  默认为相对路径 storage
-# java -Dreader.app.storagePath=cacheStorage  -jar build/libs/reader-2.0.0.jar
+# java -Dreader.app.storagePath=cacheStorage  -jar build/libs/reader-${version}.jar
 
 # web端 http://localhost:8080/
 # 接口地址 http://localhost:8080/reader3/
@@ -465,7 +516,7 @@ lastIndex 是上次搜索结果中返回的字段，默认为 0，可以传入 `
 
 #### 书籍换源
 
-- URL `http://localhost:8080/reader3/saveBookSource`
+- URL `http://localhost:8080/reader3/setBookSource`
 - Method `POST`
 - Body `json 格式`
 

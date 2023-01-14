@@ -3,12 +3,15 @@
     <keep-alive>
       <router-view></router-view>
     </keep-alive>
-    <el-dialog
-      title="登录"
-      :visible.sync="showLogin"
-      :width="dialogWidth"
-      :top="dialogTop"
-    >
+    <el-dialog :visible.sync="showLogin" :width="dialogWidth" :top="dialogTop">
+      <div class="custom-dialog-title" slot="title">
+        <span class="el-dialog__title"
+          >{{ isLogin ? "登录" : "注册" }}
+          <span class="float-right span-btn" @click="isLogin = !isLogin">{{
+            isLogin ? "注册" : "登录"
+          }}</span>
+        </span>
+      </div>
       <el-form :model="loginForm">
         <el-form-item label="用户名">
           <el-input v-model="loginForm.username" autocomplete="on"></el-input>
@@ -22,7 +25,7 @@
             @keyup.enter.native="login"
           ></el-input>
         </el-form-item>
-        <el-form-item label="邀请码(没有则不填)">
+        <el-form-item label="邀请码(没有则不填)" v-if="!isLogin">
           <el-input
             v-model="loginForm.code"
             autocomplete="off"
@@ -60,6 +63,46 @@
       :on-close="closeViewer"
       :url-list="$store.state.previewImgList"
     />
+
+    <ReplaceRuleForm
+      v-model="showReplaceRuleForm"
+      :rule="replaceRule"
+      :isAdd="isAddReplaceRule"
+    />
+
+    <ReplaceRule v-model="showReplaceRuleDialog" />
+
+    <MPCode v-model="showMPCodeDialog" />
+
+    <BookManage v-model="showBookManageDialog" />
+
+    <BookInfo v-model="showBookInfoDialog" />
+
+    <UserManage v-model="showUserManageDialog" />
+
+    <AddUser v-model="showAddUserDialog" />
+
+    <BookGroup v-model="showBookGroupDialog" :isSet="isSetBookGroup" />
+
+    <RssSourceList v-model="showRssSourceListDialog" />
+    <RssArticleList v-model="showRssArticleListDialog" :rssSource="rssSource" />
+    <RssArticle
+      v-model="showRssArticleDialog"
+      :rssArticleInfo="rssArticleInfo"
+    />
+
+    <SearchBookContent
+      v-model="showSearchBookContentDialog"
+      :book="searchBook"
+    />
+
+    <BookmarkForm
+      v-model="showBookmarkForm"
+      :bookmark="bookmark"
+      :isAdd="isAddBookmark"
+    />
+
+    <Bookmark v-model="showBookmarkDialog" :book="bookmarkInBook" />
   </div>
 </template>
 
@@ -67,10 +110,25 @@
 import Axios from "./plugins/axios";
 import eventBus from "./plugins/eventBus";
 import ImageViewer from "element-ui/packages/image/src/image-viewer.vue";
+import ReplaceRule from "./components/ReplaceRule.vue";
+import ReplaceRuleForm from "./components/ReplaceRuleForm.vue";
+import MPCode from "./components/MPCode.vue";
+import BookManage from "./components/BookManage.vue";
+import BookInfo from "./components/BookInfo.vue";
+import UserManage from "./components/UserManage.vue";
+import AddUser from "./components/AddUser.vue";
+import BookGroup from "./components/BookGroup.vue";
+import RssSourceList from "./components/RssSourceList.vue";
+import RssArticleList from "./components/RssArticleList.vue";
+import RssArticle from "./components/RssArticle.vue";
+import SearchBookContent from "./components/SearchBookContent.vue";
+import Bookmark from "./components/Bookmark.vue";
+import BookmarkForm from "./components/BookmarkForm.vue";
 import { CodeJar } from "codejar";
 import Prism from "prismjs";
 import "prismjs/components/prism-json";
 import "prismjs/themes/prism.css";
+import "./assets/fonts/iconfont.css";
 import {
   cacheFirstRequest,
   isMiniInterface,
@@ -130,7 +188,21 @@ String.prototype.getBytesLength = function() {
 export default {
   name: "app",
   components: {
-    ImageViewer
+    ImageViewer,
+    ReplaceRule,
+    ReplaceRuleForm,
+    MPCode,
+    BookManage,
+    BookInfo,
+    UserManage,
+    AddUser,
+    BookGroup,
+    RssSourceList,
+    RssArticleList,
+    RssArticle,
+    SearchBookContent,
+    Bookmark,
+    BookmarkForm
   },
   data() {
     return {
@@ -142,7 +214,43 @@ export default {
       },
       showEditor: false,
       editorTitle: "编辑器",
-      editorContent: ""
+      editorContent: "",
+
+      showReplaceRuleDialog: false,
+
+      showReplaceRuleForm: false,
+      replaceRule: {},
+      isAddReplaceRule: true,
+
+      showMPCodeDialog: false,
+
+      showBookManageDialog: false,
+
+      showBookInfoDialog: false,
+
+      showUserManageDialog: false,
+      showAddUserDialog: false,
+
+      showBookGroupDialog: false,
+      isSetBookGroup: false,
+
+      showRssSourceListDialog: false,
+      showRssArticleListDialog: false,
+      rssSource: {},
+      showRssArticleDialog: false,
+      rssArticleInfo: {},
+
+      showSearchBookContentDialog: false,
+      searchBook: {},
+
+      isLogin: true,
+
+      showBookmarkDialog: false,
+
+      showBookmarkForm: false,
+      bookmark: {},
+      isAddBookmark: true,
+      bookmarkInBook: {}
     };
   },
   beforeCreate() {
@@ -211,7 +319,10 @@ export default {
       });
     this.autoSetTheme(this.autoTheme);
 
-    this.getUserInfo();
+    this.getUserInfo().then(() => {
+      this.$store.dispatch("syncFromLocalStorage");
+      this.init();
+    });
     this.loadTxtTocRules();
   },
   beforeMount() {
@@ -220,6 +331,55 @@ export default {
     this.setPageTypeClass();
     this.eventBus = eventBus;
     eventBus.$on("showEditor", this.showEditorListener);
+    eventBus.$on("showReplaceRuleForm", this.showReplaceRuleFormListener);
+    eventBus.$on("showReplaceRuleDialog", () => {
+      this.showReplaceRuleDialog = true;
+    });
+    eventBus.$on("showMPCodeDialog", () => {
+      this.showMPCodeDialog = true;
+    });
+    eventBus.$on("showBookManageDialog", () => {
+      this.showBookManageDialog = true;
+    });
+    eventBus.$on("showBookInfoDialog", book => {
+      this.showBookInfo = book;
+      this.showBookInfoDialog = true;
+    });
+    eventBus.$on("showUserManageDialog", () => {
+      this.showUserManageDialog = true;
+    });
+    eventBus.$on("showAddUserDialog", () => {
+      this.showAddUserDialog = true;
+    });
+    eventBus.$on("showBookGroupDialog", isSet => {
+      this.showBookGroupDialog = true;
+      this.isSetBookGroup = !!isSet;
+    });
+    eventBus.$on("showRssArticleListDialog", rssSource => {
+      this.showRssArticleListDialog = true;
+      this.rssSource = rssSource;
+    });
+    eventBus.$on("showRssSourceListDialog", () => {
+      this.showRssSourceListDialog = true;
+    });
+    eventBus.$on("showRssArticleDialog", rssArticleInfo => {
+      this.showRssArticleDialog = true;
+      this.rssArticleInfo = rssArticleInfo;
+    });
+    eventBus.$on("showSearchBookContentDialog", searchBook => {
+      this.showSearchBookContentDialog = true;
+      this.searchBook = searchBook;
+    });
+    eventBus.$on("showBookmarkForm", (bookmark, isAddBookmark, callback) => {
+      this.bookmark = bookmark;
+      this.isAddBookmark = isAddBookmark;
+      this.bookmarkCallback = callback;
+      this.showBookmarkForm = true;
+    });
+    eventBus.$on("showBookmarkDialog", book => {
+      this.showBookmarkDialog = true;
+      this.bookmarkInBook = book;
+    });
   },
   mounted() {
     document.documentElement.style.setProperty(
@@ -236,15 +396,10 @@ export default {
       return this.$store.getters.config.autoTheme;
     },
     dialogWidth() {
-      return this.$store.state.miniInterface ? "85%" : "450px";
+      return this.$store.getters.dialogSmallWidth;
     },
     dialogTop() {
-      return (
-        Math.max(
-          (this.$store.state.windowSize.height - 390 - 70 - 54) / 2,
-          50
-        ) + "px"
-      );
+      return this.$store.getters.dialogTop;
     },
     showLogin: {
       get() {
@@ -256,6 +411,14 @@ export default {
     },
     connected() {
       return this.$store.state.connected;
+    },
+    showBookInfo: {
+      get() {
+        return this.$store.state.showBookInfo;
+      },
+      set(val) {
+        this.$store.commit("setShowBookInfo", val);
+      }
     }
   },
   watch: {
@@ -279,6 +442,27 @@ export default {
     },
     "$store.state.config.pageType": function() {
       this.setPageTypeClass();
+    },
+    showReplaceRuleForm(val) {
+      if (!val) {
+        if (this.replaceRuleCallback) {
+          this.replaceRuleCallback();
+          this.replaceRuleCallback = null;
+        }
+      }
+    },
+    showBookmarkForm(val) {
+      if (!val) {
+        if (this.bookmarkCallback) {
+          this.bookmarkCallback();
+          this.bookmarkCallback = null;
+        }
+      }
+    },
+    showLogin(val) {
+      if (!val) {
+        this.isLogin = true;
+      }
     }
   },
   methods: {
@@ -338,7 +522,10 @@ export default {
       };
     },
     async login() {
-      const res = await Axios.post("/login", this.loginForm);
+      const res = await Axios.post("/login", {
+        ...this.loginForm,
+        isLogin: this.isLogin
+      });
       if (res.data.isSuccess) {
         this.$store.commit("setShowLogin", false);
         this.$nextTick(() => {
@@ -347,11 +534,43 @@ export default {
         if (this.remember && res.data.data && res.data.data.accessToken) {
           this.$store.commit("setToken", res.data.data.accessToken);
         }
-        this.getUserInfo();
+        this.getUserInfo().then(() => {
+          this.$store.dispatch("syncFromLocalStorage");
+          this.init(true);
+        });
       }
     },
+    async init(refresh) {
+      if (this.initing) {
+        refresh &&
+          setTimeout(() => {
+            this.init(refresh);
+          }, 100);
+        return;
+      }
+      this.initing = true;
+      if (refresh || !this.$store.state.shelfBooks.length) {
+        await this.loadBookShelf().catch(() => {
+          this.initing = false;
+        });
+      }
+      await Promise.all([
+        // 加载书源列表
+        this.loadBookSource(refresh),
+        // 加载分组列表
+        this.loadBookGroup(refresh),
+        // 加载RSS订阅列表
+        this.loadRssSources(refresh),
+        // 加载替换规则
+        this.loadReplaceRules(refresh),
+        // 加载书签
+        this.loadBookmarks(refresh)
+      ]);
+      // 加载书架
+      this.initing = false;
+    },
     getUserInfo() {
-      networkFirstRequest(
+      return networkFirstRequest(
         () => Axios.get(this.api + "/getUserInfo"),
         "userInfo"
       ).then(
@@ -375,7 +594,10 @@ export default {
       );
     },
     loadTxtTocRules() {
-      cacheFirstRequest(() => Axios.get("/getTxtTocRules"), "txtTocRules").then(
+      return cacheFirstRequest(
+        () => Axios.get("/getTxtTocRules"),
+        "txtTocRules"
+      ).then(
         res => {
           const data = res.data.data || [];
           this.$store.commit("setTxtTocRules", data);
@@ -395,6 +617,196 @@ export default {
       this.$nextTick(() => {
         this.initEditor();
       });
+    },
+    showReplaceRuleFormListener(replaceRule, isAddReplaceRule, callback) {
+      this.replaceRule = replaceRule;
+      this.isAddReplaceRule = isAddReplaceRule;
+      this.replaceRuleCallback = callback;
+      this.showReplaceRuleForm = true;
+    },
+    loadBookShelf(refresh, api) {
+      api = api || this.api;
+      return networkFirstRequest(
+        () => Axios.get(api + "/getBookshelf?refresh=" + (refresh ? 1 : 0)),
+        "getBookshelf@" + this.currentUserName
+      )
+        .then(response => {
+          this.$store.commit("setConnected", true);
+          if (response.data.isSuccess) {
+            this.$store.commit("setShelfBooks", response.data.data);
+          }
+        })
+        .catch(error => {
+          this.$store.commit("setConnected", false);
+          this.$message.error("后端连接失败 " + (error && error.toString()));
+          throw error;
+        });
+    },
+    loadBookGroup(refresh) {
+      return cacheFirstRequest(
+        () => Axios.get(this.api + "/getBookGroups"),
+        "bookGroup@" + this.currentUserName,
+        refresh
+      ).then(
+        res => {
+          if (res.data.isSuccess) {
+            this.$store.commit("setBookGroupList", res.data.data || []);
+          }
+        },
+        error => {
+          this.$message.error(
+            "加载分组列表失败 " + (error && error.toString())
+          );
+        }
+      );
+    },
+    loadRssSources(refresh) {
+      return cacheFirstRequest(
+        () =>
+          Axios.get(this.api + "/getRssSources", {
+            params: {
+              simple: 1
+            }
+          }),
+        "rssSources@" + this.currentUserName,
+        refresh
+      ).then(
+        res => {
+          const data = res.data.data || [];
+          this.$store.commit("setRssSourceList", data);
+        },
+        error => {
+          this.$message.error(
+            "加载RSS订阅列表失败 " + (error && error.toString())
+          );
+        }
+      );
+    },
+    loadBookSource(refresh) {
+      return cacheFirstRequest(
+        () =>
+          Axios.get(this.api + "/getBookSources", {
+            params: {
+              simple: 1
+            }
+          }),
+        "bookSourceList@" + this.currentUserName,
+        refresh
+      ).then(
+        res => {
+          if (res.data.isSuccess) {
+            this.$store.commit("setBookSourceList", res.data.data || []);
+          }
+        },
+        error => {
+          this.$message.error(
+            "加载书源列表失败 " + (error && error.toString())
+          );
+        }
+      );
+    },
+    loadReplaceRules(refresh) {
+      return cacheFirstRequest(
+        () => Axios.get(this.api + "/getReplaceRules"),
+        "replaceRule@" + this.currentUserName,
+        refresh
+      ).then(
+        res => {
+          if (res.data.isSuccess) {
+            this.$store.commit("setFilterRules", res.data.data || []);
+          }
+        },
+        error => {
+          this.$message.error(
+            "加载替换规则失败 " + (error && error.toString())
+          );
+        }
+      );
+    },
+    loadBookmarks(refresh) {
+      return cacheFirstRequest(
+        () => Axios.get(this.api + "/getBookmarks"),
+        "bookmark@" + this.currentUserName,
+        refresh
+      ).then(
+        res => {
+          if (res.data.isSuccess) {
+            this.$store.commit("setBookmarks", res.data.data || []);
+          }
+        },
+        error => {
+          this.$message.error("加载书签失败 " + (error && error.toString()));
+        }
+      );
+    },
+    async isInShelf(book, addTip) {
+      if (!book || !book.bookUrl || !book.origin) {
+        this.$message.error("书籍信息错误");
+        return false;
+      }
+      // 判断是否加入了书架
+      const isInShelf = this.$store.getters.shelfBooks.find(
+        v => v.bookUrl === book.bookUrl
+      );
+      if (!isInShelf) {
+        if (addTip) {
+          const res = await this.$confirm(addTip, "提示", {
+            confirmButtonText: "确定",
+            cancelButtonText: "取消",
+            type: "warning"
+          }).catch(() => {
+            return false;
+          });
+          if (!res) {
+            return false;
+          }
+          // 加入书架
+          return Axios.post(this.api + "/saveBook", book).then(
+            res => {
+              if (res.data.isSuccess) {
+                return true;
+              }
+            },
+            () => {
+              this.$message.error("导入书籍失败");
+              return false;
+            }
+          );
+        }
+      }
+      return !!isInShelf;
+    },
+    getBookContent(chapterIndex, options, refresh, cache, book) {
+      book = book || {
+        name: this.$store.getters.readingBook.name,
+        author: this.$store.getters.readingBook.author,
+        bookUrl: this.$store.getters.readingBook.bookUrl
+      };
+      const params = {
+        url: book.bookUrl,
+        index: chapterIndex
+      };
+      if (refresh) {
+        params.refresh = 1;
+      }
+      if (cache) {
+        params.cache = 1;
+      }
+      return cacheFirstRequest(
+        () =>
+          Axios.post(this.api + "/getBookContent", params, {
+            timeout: 30000,
+            ...options
+          }),
+        book.name +
+          "_" +
+          book.author +
+          "@" +
+          book.bookUrl +
+          "@chapterContent-" +
+          chapterIndex,
+        refresh
+      );
     },
     initEditor() {
       const editor = this.$refs.editorRef;
@@ -553,9 +965,7 @@ export default {
       background-color: transparent;
   }
   .el-button.is-disabled, .el-button.is-disabled:focus, .el-button.is-disabled:hover {
-      color: #C0C4CC;
-      background-color: #333;
-      border-color: #333;
+      color: #666;
   }
   .el-button--primary {
     background: #185798;
@@ -584,6 +994,15 @@ export default {
     border: 1px solid #444 !important;
     color: #ddd;
   }
+  .el-tabs__item {
+    color: #ddd;
+  }
+  .el-tabs__nav-next, .el-tabs__nav-prev {
+    color: #aaa;
+  }
+  .el-tabs__nav-wrap::after {
+    background-color: #444;
+  }
   .el-select-dropdown {
     background-color: #333;
     border: 1px solid #333 !important;
@@ -592,6 +1011,18 @@ export default {
     color: #ddd;
   }
   .el-select-dropdown__item.hover, .el-select-dropdown__item:hover {
+    background-color: #444;
+  }
+  .el-select .el-tag.el-tag--info {
+    background-color: #777;
+    border-color: #777;
+    color: #ddd;
+  }
+  .el-select-dropdown.is-multiple .el-select-dropdown__item.selected.hover,
+  .el-select-dropdown.is-multiple .el-select-dropdown__item.hover {
+    background-color: #555;
+  }
+  .el-select-dropdown.is-multiple .el-select-dropdown__item.selected {
     background-color: #444;
   }
   .el-popper[x-placement^="bottom"] .popper__arrow, .el-popper[x-placement^="bottom"] .popper__arrow::after {
@@ -630,6 +1061,83 @@ export default {
       background: inherit;
     }
   }
+
+  .el-table {
+    background-color: transparent;
+  }
+  .el-table__expanded-cell {
+    background-color: transparent;
+  }
+  .el-table th, .el-table tr{
+    background-color: #222 !important;
+  }
+  .el-table td {
+    border-bottom: 1px solid #555;
+  }
+  .el-table th.is-leaf {
+    border-bottom: 1px solid #555;
+  }
+  .el-table td.el-table__cell, .el-table th.el-table__cell.is-leaf {
+    border-bottom: 1px solid #555;
+  }
+  .el-dropdown-menu {
+    background-color: #444 !important;
+    border-color: #444;
+  }
+  .el-dropdown-menu__item:focus, .el-dropdown-menu__item:not(.is-disabled):hover {
+    background-color: #666 !important;
+    border-color: #666;
+  }
+  .el-dropdown-menu__item {
+    color: #bbb;
+  }
+  .el-table--border::after {
+    background-color: transparent;
+  }
+  .el-table--group::after {
+    background-color: transparent;
+  }
+  .el-table::before {
+    background-color: transparent;
+  }
+  .el-table {
+    color: #888;
+    background-color: transparent;
+  }
+  .el-table--enable-row-hover .el-table__body tr:hover>td {
+    background-color: #333;
+  }
+  .el-table__fixed-right::before, .el-table__fixed::before {
+    background-color: #333;
+  }
+  .el-table__body tr.hover-row.current-row>td,
+  .el-table__body tr.hover-row.el-table__row--striped.current-row>td,
+  .el-table__body tr.hover-row.el-table__row--striped>td,
+  .el-table__body tr.hover-row>td {
+    background-color: #444;
+  }
+  .el-table__body tr.hover-row.current-row>td.el-table__cell,
+  .el-table__body tr.hover-row.el-table__row--striped.current-row>td.el-table__cell,
+  .el-table__body tr.hover-row.el-table__row--striped>td.el-table__cell,
+  .el-table__body tr.hover-row>td.el-table__cell {
+    background-color: #444;
+    color: #ccc;
+  }
+  .el-table--enable-row-hover .el-table__body tr:hover>td.el-table__cell {
+    background-color: #444;
+    color: #ccc;
+  }
+  .el-table__body-wrapper::-webkit-scrollbar {
+    background-color: #333 !important;
+  }
+
+  .el-dialog__wrapper::-webkit-scrollbar {
+    background-color: #333 !important;
+  }
+
+  .check-tip {
+    color: #bbb;
+  }
 }
 .el-popover:focus, .el-popover:focus:active, .el-popover__reference:focus:hover, .el-popover__reference:focus:not(.focusing) {
   outline: none;
@@ -652,5 +1160,26 @@ export default {
 .kindle-page {
   -webkit-tap-highlight-color: rbga(255, 255, 255, 0);
   -webkit-user-select: none;
+}
+.check-tip {
+  display: inline-block;
+  float: left;
+  line-height: 40px;
+  margin-left: 10px;
+  font-size: 14px;
+}
+.float-left {
+  float: left;
+}
+.float-right {
+  float: right;
+}
+.custom-dialog-title {
+  .span-btn {
+    display: inline-block;
+    cursor: pointer;
+    font-size: 15px;
+    margin-right: 10px;
+  }
 }
 </style>
